@@ -1,13 +1,16 @@
 import React, { useRef, useState } from 'react';
 import Webcam from 'react-webcam';
-import excard from '../assets/icons/excard.svg';
+import stretchIcon from '../assets/icons/stretch.svg';
+import lungeIcon from '../assets/icons/lunge.svg';
+import plankIcon from '../assets/icons/plank.svg';
+import sidelegIcon from '../assets/icons/sideleg.svg';
 import '../styles/WorkoutRecordScreen.css';
 
 const exercises = [
-  { name: '스트레칭', sets: 2, score: 100 },
-  { name: '런지', sets: 3, score: 85 },
-  { name: '플랭크', sets: 3, score: 30 },
-  { name: '사이드 레그 레이즈', sets: 1, score: 70 },
+  { name: '스트레칭', sets: 2, score: 100, icon: stretchIcon },
+  { name: '런지', sets: 3, score: 85, icon: lungeIcon },
+  { name: '플랭크', sets: 3, score: 30, icon: plankIcon },
+  { name: '사이드 레그 레이즈', sets: 1, score: 70, icon: sidelegIcon },
 ];
 
 function getTodayString() {
@@ -45,7 +48,7 @@ const WorkoutRecordScreen: React.FC = () => {
         <div className="workout-list">
           {exercises.map((ex, idx) => (
             <div className="workout-row" key={ex.name + idx}>
-              <img src={excard} alt="운동 아이콘" className="workout-icon" />
+              <img src={ex.icon} alt={`${ex.name} 아이콘`} className="workout-icon" />
               <div className="workout-info">
                 <div className="workout-name">{ex.name}</div>
                 <div className="workout-sets">{ex.sets} 세트</div>
