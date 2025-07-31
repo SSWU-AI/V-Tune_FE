@@ -1,0 +1,138 @@
+.workout-record-root {
+  width: 100vw;
+  min-height: 100vh;
+  background: #18181b;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'Pretendard', sans-serif;
+  color: #fff;
+}
+
+.workout-header {
+  margin-top: 32px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.workout-title {
+  font-size: 18px;
+  color: #f7f7fa;
+}
+
+.workout-card {
+  background: #23232a;
+  border-radius: 24px;
+  padding: 32px 16px 24px 16px;
+  width: 362px;
+  margin-bottom: 24px;
+  box-sizing: border-box;
+}
+
+.workout-card-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #3b82f6;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.workout-date {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.workout-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.workout-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #2b2d36;
+  border-radius: 16px;
+  padding: 12px 20px;
+}
+
+.workout-icon {
+  width: 48px;
+  height: 48px;
+  margin-right: 16px;
+}
+
+.workout-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.workout-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.workout-sets {
+  font-size: 14px;
+  color: #bdbdbd;
+}
+
+.workout-score {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #3b82f6;
+  background: #23232a;
+}
+
+.workout-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.save-btn {
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.end-btn {
+  background: #23232a;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.photo-preview {
+  margin-top: 16px;
+  text-align: center;
+}
+.photo-preview img {
+  width: 180px;
+  border-radius: 12px;
+  border: 2px solid #3b82f6;
+}

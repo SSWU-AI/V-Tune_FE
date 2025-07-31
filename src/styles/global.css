@@ -1,0 +1,26 @@
+/* 기본 리셋: 브라우저마다 다르게 보이는 것 제거 (선택사항) */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Pretendard 폰트 적용 */
+body {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+  background-color: black;
+  color: white;
+}
+
+/* 전체 앱에서 링크나 버튼 기본 스타일 정리 (선택사항) */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
