@@ -15,7 +15,7 @@ const exercises = [
 
 function getTodayString() {
   const now = new Date();
-  return `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 ${now.getHours()}시 ${now.getMinutes()}분`;
+  return `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 `;
 }
 
 const WorkoutRecordScreen: React.FC = () => {
