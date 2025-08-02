@@ -11,7 +11,6 @@ const StretchScreen: React.FC = () => {
   const [reps, setReps] = useState(0);
   const [sets, setSets] = useState(1);
 
-  // 3초마다 Reps 증가, 점(dot)은 3개까지만
   useEffect(() => {
     const interval = setInterval(() => {
       setReps(prev => {
@@ -33,16 +32,19 @@ const StretchScreen: React.FC = () => {
         <button><img src={nextIcon} alt="Next" /></button>
       </div>
 
-      <div className="camera-wrapper">
-        <Webcam className="camera" mirrored />
-        <div className="overlay-box">
-          <div className="set-count">
-            <div className="dots">
-              {[...Array(sets > MAX_DOTS ? MAX_DOTS : sets)].map((_, i) => (
-                <div key={i} className="dot" />
-              ))}
+      {/* 카드 형태로 camera 감싸기 */}
+      <div className="camera-card">
+        <div className="camera-wrapper">
+          <Webcam className="camera" mirrored />
+          <div className="overlay-box">
+            <div className="set-count">
+              <div className="dots">
+                {[...Array(sets > MAX_DOTS ? MAX_DOTS : sets)].map((_, i) => (
+                  <div key={i} className="dot" />
+                ))}
+              </div>
+              <div className="reps">Reps<br />{reps}</div>
             </div>
-            <div className="reps">Reps<br />{reps}</div>
           </div>
         </div>
       </div>
