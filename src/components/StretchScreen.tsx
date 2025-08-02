@@ -15,7 +15,7 @@ const StretchScreen: React.FC = () => {
   const [showPopup, setShowPopup] = useState(false);
   const navigate = useNavigate();
 
-  // Reps 증가 로직
+  // Reps 증가 로직 -> api 개발 후 로직 수정
   useEffect(() => {
     const interval = setInterval(() => {
       setReps(prev => {
@@ -34,7 +34,7 @@ const StretchScreen: React.FC = () => {
     const timer = setTimeout(() => {
       setShowPopup(true);
 
-      // 팝업 3초 후 이동
+      // 팝업 3초 후 페이지 이동
       setTimeout(() => {
         navigate('/record');
       }, 3000);
