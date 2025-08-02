@@ -1,16 +1,21 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Webcam from 'react-webcam';
 import '../styles/StretchScreen.css';
 import prevIcon from '../assets/icons/prev.svg';
 import nextIcon from '../assets/icons/next.svg';
 import personIcon from '../assets/icons/person.svg';
+import Popup from './Popup';
 
 const MAX_DOTS = 3;
 
 const StretchScreen: React.FC = () => {
   const [reps, setReps] = useState(0);
   const [sets, setSets] = useState(1);
+  const [showPopup, setShowPopup] = useState(false);
+  const navigate = useNavigate();
 
+  // Reps 증가 로직
   useEffect(() => {
     const interval = setInterval(() => {
       setReps(prev => {
@@ -23,6 +28,20 @@ const StretchScreen: React.FC = () => {
     }, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  // 1분 후 팝업 띄우기 -> api 개발 후 로직 수정
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowPopup(true);
+
+      // 팝업 3초 후 이동
+      setTimeout(() => {
+        navigate('/record');
+      }, 3000);
+    }, 60000); // 1분 후
+
+    return () => clearTimeout(timer);
+  }, [navigate]);
 
   return (
     <div className="stretch-container">
@@ -46,6 +65,7 @@ const StretchScreen: React.FC = () => {
               <div className="reps">Reps<br />{reps}</div>
             </div>
           </div>
+          {showPopup && <Popup />}
         </div>
       </div>
 
