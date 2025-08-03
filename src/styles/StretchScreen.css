@@ -62,7 +62,7 @@
 .dot {
   width: 8px;
   height: 8px;
-  background-color: blue;
+  background-color: #1F4EF5;
   border-radius: 50%;
 }
 
@@ -94,7 +94,7 @@
   border-top-left-radius: 20px;
   border-top-right-radius: 20px;
   border-bottom-right-radius: 20px;
-  border-bottom-left-radius: 8px;
+  border-bottom-left-radius: 0px;
   padding: 16px 20px;
   font-size: 16px;
   font-family: 'Pretendard', sans-serif;
@@ -108,7 +108,7 @@
 
 .camera-card {
   margin: 0 16px;
-  border-radius: 17px;
+  border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   background-color: #1a1a1a;

@@ -4,6 +4,8 @@ import stretchIcon from '../assets/icons/stretch.svg';
 import lungeIcon from '../assets/icons/lunge.svg';
 import plankIcon from '../assets/icons/plank.svg';
 import sidelegIcon from '../assets/icons/sideleg.svg';
+import vTuneIcon from '../assets/icons/vtune.svg'; 
+import scoreCircleIcon from '../assets/icons/score-circle.svg'; 
 import '../styles/WorkoutRecordScreen.css';
 
 const exercises = [
@@ -28,7 +30,6 @@ const WorkoutRecordScreen: React.FC = () => {
       if (imageSrc) {
         setPhoto(imageSrc);
 
-        // 이미지 다운로드
         const link = document.createElement('a');
         link.href = imageSrc;
         link.download = `workout_${Date.now()}.png`;
@@ -42,9 +43,11 @@ const WorkoutRecordScreen: React.FC = () => {
       <div className="workout-header">
         <span className="workout-title">멋진 기록을 자랑해주세요!</span>
       </div>
+
       <div className="workout-card">
-        <div className="workout-card-title">V-Tune</div>
+        <img src={vTuneIcon} alt="V-Tune 로고" className="vtune-logo" />
         <div className="workout-date">{getTodayString()}</div>
+
         <div className="workout-list">
           {exercises.map((ex, idx) => (
             <div className="workout-row" key={ex.name + idx}>
@@ -53,20 +56,22 @@ const WorkoutRecordScreen: React.FC = () => {
                 <div className="workout-name">{ex.name}</div>
                 <div className="workout-sets">{ex.sets} 세트</div>
               </div>
-              <div className="workout-score">
-                <span>{ex.score}</span>
+              <div className="workout-score-icon">
+                <img src={scoreCircleIcon} alt="점수 원 아이콘" className="score-circle" />
+                <span className="score-text">{ex.score}</span>
               </div>
             </div>
           ))}
         </div>
       </div>
+
       <div className="workout-actions">
         <button className="save-btn" onClick={handleSaveRecord}>운동 기록 저장</button>
         <button className="end-btn">운동 끝내기</button>
       </div>
-      {/* 웹캠은 숨겨진 상태로 캡처만 사용 */}
+
       <Webcam ref={webcamRef} screenshotFormat="image/png" style={{ display: 'none' }} />
-      {/* 저장된 사진 미리보기(선택) */}
+
       {photo && (
         <div className="photo-preview">
           <img src={photo} alt="운동 사진" />
