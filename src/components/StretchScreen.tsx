@@ -13,16 +13,16 @@ const StretchScreen: React.FC = () => {
   const [reps, setReps] = useState(0);
   const [sets, setSets] = useState(1);
   const [showPopup, setShowPopup] = useState(false);
-  const [facingMode, setFacingMode] = useState<"user" | "environment">("user"); // 전/후면 상태
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
 
   const navigate = useNavigate();
 
-  // 전/후면 카메라 토글 함수
+  // 전/후면 카메라 전환
   const toggleCamera = useCallback(() => {
     setFacingMode(prev => (prev === "user" ? "environment" : "user"));
   }, []);
 
-  // Reps 증가 로직 -> API 개발 후 수정 예정
+  // Reps 증가 로직
   useEffect(() => {
     const interval = setInterval(() => {
       setReps(prev => {
@@ -36,7 +36,7 @@ const StretchScreen: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // 1분 후 팝업 띄우기 및 페이지 이동
+  // 1분 후 팝업 및 페이지 이동
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowPopup(true);
@@ -63,6 +63,7 @@ const StretchScreen: React.FC = () => {
             videoConstraints={{
               facingMode: facingMode,
             }}
+            mirrored={false}
           />
           <div className="overlay-box">
             <div className="set-count">
