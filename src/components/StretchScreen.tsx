@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import Webcam from 'react-webcam';
 import '../styles/StretchScreen.css';
 import prevIcon from '../assets/icons/prev.svg';
@@ -14,8 +15,24 @@ const StretchScreen: React.FC = () => {
   const [sets, setSets] = useState(1);
   const [showPopup, setShowPopup] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [exerciseName, setExerciseName] = useState<string>('로딩 중...');
 
   const navigate = useNavigate();
+
+  //  운동 이름 불러오기
+  useEffect(() => {
+    const fetchExerciseName = async () => {
+      try {
+        const response = await axios.get('https://v-tune-be.onrender.com/api/data/exercises/names');
+        setExerciseName(response.data.name);
+      } catch (error) {
+        console.error('운동 이름 불러오기 실패:', error);
+        setExerciseName('운동 이름 없음');
+      }
+    };
+
+    fetchExerciseName();
+  }, []);
 
   // 전/후면 카메라 전환
   const toggleCamera = useCallback(() => {
@@ -51,7 +68,7 @@ const StretchScreen: React.FC = () => {
     <div className="stretch-container">
       <div className="top-bar">
         <button><img src={prevIcon} alt="Previous" /></button>
-        <h2>캣카우 스트레칭</h2>
+        <h2>{exerciseName}</h2>
         <button><img src={nextIcon} alt="Next" /></button>
       </div>
 
