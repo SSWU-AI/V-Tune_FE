@@ -23,8 +23,8 @@ const StretchScreen: React.FC = () => {
   useEffect(() => {
     const fetchExerciseName = async () => {
       try {
-        const response = await axios.get('https://v-tune-be.onrender.com/api/data/exercises/names');
-        setExerciseName(response.data.name);
+        const response = await axios.get('https://v-tune-be.onrender.com/api/data/exercises/names/');
+        setExerciseName(response.data.names[0]); 
       } catch (error) {
         console.error('운동 이름 불러오기 실패:', error);
         setExerciseName('운동 이름 없음');
@@ -77,9 +77,7 @@ const StretchScreen: React.FC = () => {
         <div className="camera-wrapper">
           <Webcam
             className="camera"
-            videoConstraints={{
-              facingMode: facingMode,
-            }}
+            videoConstraints={{ facingMode }}
             mirrored={false}
           />
           <div className="overlay-box">
