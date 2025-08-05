@@ -1,12 +1,28 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background-color: #0f0f0f;
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  font-family: 'Pretendard', sans-serif;
+}
+
 .home-container {
   background-color: #0f0f0f;
   color: white;
+  height: 100dvh; /* 아이폰 notch 대응 */
   min-height: 100vh;
-  padding: 24px 16px;
+  padding-top: calc(24px + env(safe-area-inset-top));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  padding-left: 16px;
+  padding-right: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  font-family: 'Pretendard', sans-serif;
+  box-sizing: border-box;
 }
 
 .logo {
@@ -27,7 +43,7 @@
   display: grid;
   grid-template-columns: repeat(2, 157px);
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: auto;
 }
 
 .card {
@@ -38,6 +54,7 @@
   cursor: pointer;
   border: 2px solid transparent;
   transition: border 0.2s;
+  box-sizing: border-box;
 }
 
 .card.selected {
@@ -73,6 +90,7 @@
   color: #fff;
   border: none;
   transition: background-color 0.2s;
+  margin-top: 24px;
 }
 
 .start-button.active {
