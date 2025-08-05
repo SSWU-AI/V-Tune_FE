@@ -1,0 +1,85 @@
+.home-container {
+  background-color: #0f0f0f;
+  color: white;
+  min-height: 100vh;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'Pretendard', sans-serif;
+}
+
+.logo {
+  margin-top: 10px;
+  margin-bottom: 8px;
+  height: 24px;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 24px;
+  text-align: center;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, 157px);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.card {
+  background-color: #1c1c1e;
+  border-radius: 10px;
+  padding: 16px;
+  height: 222px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border 0.2s;
+}
+
+.card.selected {
+  border: 2px solid #4880EE;
+}
+
+.card-title {
+  font-weight: 700;
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
+.card-keywords {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.card-list {
+  list-style-type: disc;
+  padding-left: 20px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.start-button {
+  width: 325px;
+  height: 39px;
+  border-radius: 6.49px;
+  font-weight: 500;
+  font-size: 14px;
+  background-color: #3a3a3c;
+  color: #fff;
+  border: none;
+  transition: background-color 0.2s;
+}
+
+.start-button.active {
+  background-color: #4880EE;
+}
+
+.start-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
