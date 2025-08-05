@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Webcam from 'react-webcam';
 import '../styles/StretchScreen.css';
@@ -13,9 +13,16 @@ const StretchScreen: React.FC = () => {
   const [reps, setReps] = useState(0);
   const [sets, setSets] = useState(1);
   const [showPopup, setShowPopup] = useState(false);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user"); // 전/후면 상태
+
   const navigate = useNavigate();
 
-  // Reps 증가 로직 -> api 개발 후 로직 수정
+  // 전/후면 카메라 토글 함수
+  const toggleCamera = useCallback(() => {
+    setFacingMode(prev => (prev === "user" ? "environment" : "user"));
+  }, []);
+
+  // Reps 증가 로직 -> API 개발 후 수정 예정
   useEffect(() => {
     const interval = setInterval(() => {
       setReps(prev => {
@@ -29,17 +36,14 @@ const StretchScreen: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // 1분 후 팝업 띄우기 -> api 개발 후 로직 수정
+  // 1분 후 팝업 띄우기 및 페이지 이동
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowPopup(true);
-
-      // 팝업 3초 후 페이지 이동
       setTimeout(() => {
         navigate('/record');
       }, 3000);
-    }, 60000); // 1분 후
-
+    }, 60000);
     return () => clearTimeout(timer);
   }, [navigate]);
 
@@ -51,10 +55,15 @@ const StretchScreen: React.FC = () => {
         <button><img src={nextIcon} alt="Next" /></button>
       </div>
 
-      {/* 카드 형태로 camera 감싸기 */}
-      <div className="camera-card">
+      {/* 카메라 카드 클릭 시 전/후면 전환 */}
+      <div className="camera-card" onClick={toggleCamera}>
         <div className="camera-wrapper">
-          <Webcam className="camera" mirrored />
+          <Webcam
+            className="camera"
+            videoConstraints={{
+              facingMode: facingMode,
+            }}
+          />
           <div className="overlay-box">
             <div className="set-count">
               <div className="dots">
