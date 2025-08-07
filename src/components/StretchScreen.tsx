@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import Webcam from 'react-webcam';
 import { Pose, POSE_LANDMARKS, POSE_CONNECTIONS } from '@mediapipe/pose';
@@ -20,35 +20,54 @@ const StretchScreen: React.FC = () => {
   const [showPopup, setShowPopup] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [exerciseName, setExerciseName] = useState('로딩 중...');
-  const [exerciseDesc, setExerciseDesc] = useState('운동 설명을 불러오는 중입니다...');
-
+  const [exerciseDesc, setExerciseDesc] = useState('포즈 설명을 불러오는 중입니다...');
+  
   const navigate = useNavigate();
   const webcamRef = useRef<Webcam>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const cameraRef = useRef<cam.Camera | null>(null);
   const poseRef = useRef<Pose | null>(null);
+  const [searchParams] = useSearchParams();
 
-  // 운동 정보 불러오기
+  //  운동 정보 + 포즈 설명 가져오기
   useEffect(() => {
-    const fetchExerciseInfo = async () => {
+    const routineId = searchParams.get('routineId');
+    if (!routineId) return;
+
+    const fetchExerciseAndPoseDesc = async () => {
       try {
-        const response = await axios.get('https://v-tune-be.onrender.com/api/data/exercises/');
-        const data = response.data[9];
-        if (data) {
-          setExerciseName(data.name || '운동 이름 없음');
-          setExerciseDesc(data.description || '운동 설명 없음');
+        const response = await axios.get(
+          `https://v-tune-be.onrender.com/api/routines/${routineId}/exercises/`
+        );
+
+        const exercises = response.data.exercises;
+        const firstExercise = Array.isArray(exercises) ? exercises[0] : null;
+
+        if (firstExercise) {
+          setExerciseName(firstExercise.name || '운동 이름 없음');
+
+          const poseStepRes = await axios.get(
+            `https://v-tune-be.onrender.com/api/data/pose-steps/?exercise_id=${firstExercise.exercise_id}`
+          );
+
+          if (Array.isArray(poseStepRes.data) && poseStepRes.data.length > 0) {
+            setExerciseDesc(poseStepRes.data[0].pose_description || '포즈 설명 없음');
+          } else {
+            setExerciseDesc('포즈 설명 없음');
+          }
         } else {
           setExerciseName('운동 이름 없음');
-          setExerciseDesc('운동 설명 없음');
+          setExerciseDesc('포즈 설명 없음');
         }
       } catch (error) {
-        console.error('운동 정보 불러오기 실패:', error);
+        console.error('운동 정보 또는 포즈 설명 불러오기 실패:', error);
         setExerciseName('운동 이름 없음');
-        setExerciseDesc('운동 설명 없음');
+        setExerciseDesc('포즈 설명 없음');
       }
     };
-    fetchExerciseInfo();
-  }, []);
+
+    fetchExerciseAndPoseDesc();
+  }, [searchParams]);
 
   // Mediapipe 초기화 및 카메라 연결
   useEffect(() => {
@@ -89,7 +108,7 @@ const StretchScreen: React.FC = () => {
     };
   }, []);
 
-  // Pose 결과 처리 및 canvas에 그리기
+  //  Pose 결과 처리 및 canvas 그리기
   const onResults = async (results: Results) => {
     if (!results.poseLandmarks) return;
 
@@ -101,10 +120,8 @@ const StretchScreen: React.FC = () => {
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw connections
     for (const [startIdx, endIdx] of POSE_CONNECTIONS) {
       const start = results.poseLandmarks[startIdx];
       const end = results.poseLandmarks[endIdx];
@@ -117,7 +134,6 @@ const StretchScreen: React.FC = () => {
       ctx.stroke();
     }
 
-    // Draw keypoints
     for (const pt of results.poseLandmarks) {
       ctx.beginPath();
       ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 4, 0, 2 * Math.PI);
@@ -125,7 +141,6 @@ const StretchScreen: React.FC = () => {
       ctx.fill();
     }
 
-    // Keypoints → 백엔드 전송
     const keypoints: Record<string, [number, number]> = {};
     results.poseLandmarks.forEach((landmark, index) => {
       const key = Object.keys(POSE_LANDMARKS)[index];
@@ -153,12 +168,10 @@ const StretchScreen: React.FC = () => {
     }
   };
 
-  // 카메라 전환
   const toggleCamera = useCallback(() => {
     setFacingMode(prev => (prev === "user" ? "environment" : "user"));
   }, []);
 
-  // 1분 후 팝업 + 이동
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowPopup(true);
