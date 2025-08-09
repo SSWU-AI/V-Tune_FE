@@ -22,6 +22,14 @@ interface PoseStep {
   exercise: number;
 }
 
+interface Exercise {
+  exercise_id: number;
+  name: string;
+  description: string;
+  repetition: number;
+  order: number;
+}
+
 const StretchScreen: React.FC = () => {
   const [step, setStep] = useState(1);
   const [sets, setSets] = useState(0);
@@ -31,6 +39,8 @@ const StretchScreen: React.FC = () => {
   const [exerciseDesc, setExerciseDesc] = useState('포즈 설명을 불러오는 중입니다...');
   const [poseSteps, setPoseSteps] = useState<PoseStep[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   
   const navigate = useNavigate();
   const webcamRef = useRef<Webcam>(null);
@@ -50,30 +60,16 @@ const StretchScreen: React.FC = () => {
           `https://v-tune-be.onrender.com/api/routines/${routineId}/exercises/`
         );
 
-        const exercises = response.data.exercises;
-        const firstExercise = Array.isArray(exercises) ? exercises[0] : null;
-
-        if (firstExercise) {
-          setExerciseName(firstExercise.name || '운동 이름 없음');
+        const exerciseList = response.data.exercises;
+        if (Array.isArray(exerciseList) && exerciseList.length > 0) {
+          setExercises(exerciseList);
+          
+          // 현재 운동 (첫 번째 운동)
+          const currentExercise = exerciseList[currentExerciseIndex];
+          setExerciseName(currentExercise.name || '운동 이름 없음');
 
           // 포즈 스텝 데이터 가져오기
-          const poseStepRes = await axios.get(
-            `https://v-tune-be.onrender.com/api/data/pose-steps/?exercise_id=${firstExercise.exercise_id}`
-          );
-
-          if (Array.isArray(poseStepRes.data) && poseStepRes.data.length > 0) {
-            const steps = poseStepRes.data;
-            setPoseSteps(steps);
-            
-            // 첫 번째 스텝의 설명을 표시
-            setExerciseDesc(steps[0].pose_description || '포즈 설명 없음');
-            setStep(steps[0].step_number);
-            
-            console.log('총 스텝 수:', steps.length);
-            console.log('마지막 스텝 번호:', steps[steps.length - 1].step_number);
-          } else {
-            setExerciseDesc('포즈 설명 없음');
-          }
+          await loadPoseSteps(currentExercise.exercise_id);
         } else {
           setExerciseName('운동 이름 없음');
           setExerciseDesc('포즈 설명 없음');
@@ -86,7 +82,35 @@ const StretchScreen: React.FC = () => {
     };
 
     fetchExerciseAndPoseDesc();
-  }, [searchParams]);
+  }, [searchParams, currentExerciseIndex]);
+
+  // 포즈 스텝 데이터를 로드하는 함수
+  const loadPoseSteps = async (exerciseId: number) => {
+    try {
+      const poseStepRes = await axios.get(
+        `https://v-tune-be.onrender.com/api/data/pose-steps/?exercise_id=${exerciseId}`
+      );
+
+      if (Array.isArray(poseStepRes.data) && poseStepRes.data.length > 0) {
+        const steps = poseStepRes.data;
+        setPoseSteps(steps);
+        
+        // 첫 번째 스텝의 설명을 표시
+        setExerciseDesc(steps[0].pose_description || '포즈 설명 없음');
+        setStep(steps[0].step_number);
+        setCurrentStepIndex(0);
+        setSets(0); // 새 운동 시작 시 세트 초기화
+        
+        console.log('총 스텝 수:', steps.length);
+        console.log('마지막 스텝 번호:', steps[steps.length - 1].step_number);
+      } else {
+        setExerciseDesc('포즈 설명 없음');
+      }
+    } catch (error) {
+      console.error('포즈 스텝 불러오기 실패:', error);
+      setExerciseDesc('포즈 설명 없음');
+    }
+  };
 
   // Mediapipe 초기화 및 카메라 연결
   useEffect(() => {
@@ -186,6 +210,24 @@ const StretchScreen: React.FC = () => {
             setCurrentStepIndex(0);
             setExerciseDesc(poseSteps[0]?.pose_description || '포즈 설명 없음');
             setStep(poseSteps[0]?.step_number || 1);
+            
+            // 3세트 완료 시 다음 운동으로 이동
+            if (sets + 1 >= MAX_DOTS) {
+              console.log('3세트 완료! 다음 운동으로 이동합니다.');
+              
+              // 다음 운동이 있는지 확인
+              if (currentExerciseIndex + 1 < exercises.length) {
+                // 다음 운동으로 이동
+                setCurrentExerciseIndex(prev => prev + 1);
+              } else {
+                // 모든 운동 완료
+                console.log('모든 운동 완료! 루틴이 끝났습니다.');
+                setShowPopup(true);
+                setTimeout(() => {
+                  navigate('/record');
+                }, 3000);
+              }
+            }
           }
         } else {
           // 다음 스텝으로 진행
@@ -203,15 +245,16 @@ const StretchScreen: React.FC = () => {
     setFacingMode(prev => (prev === "user" ? "environment" : "user"));
   }, []);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowPopup(true);
-      setTimeout(() => {
-        navigate('/record');
-      }, 3000);
-    }, 60000);
-    return () => clearTimeout(timer);
-  }, [navigate]);
+  // 기존 1분 타이머 제거 (모든 운동 완료 시에만 팝업 표시)
+  // useEffect(() => {
+  //   const timer = setTimeout(() => {
+  //     setShowPopup(true);
+  //     setTimeout(() => {
+  //       navigate('/record');
+  //     }, 3000);
+  //   }, 60000);
+  //   return () => clearTimeout(timer);
+  // }, [navigate]);
 
   return (
     <div className="stretch-container">
