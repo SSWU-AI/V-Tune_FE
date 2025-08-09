@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import Webcam from 'react-webcam';
 import { Pose, POSE_LANDMARKS, POSE_CONNECTIONS } from '@mediapipe/pose';
@@ -14,41 +14,103 @@ import Popup from './Popup';
 
 const MAX_DOTS = 3;
 
+interface PoseStep {
+  id: number;
+  step_number: number;
+  keypoints: string;
+  pose_description: string;
+  exercise: number;
+}
+
+interface Exercise {
+  exercise_id: number;
+  name: string;
+  description: string;
+  repetition: number;
+  order: number;
+}
+
 const StretchScreen: React.FC = () => {
-  const [reps, setReps] = useState(0);
-  const [sets, setSets] = useState(1);
+  const [step, setStep] = useState(1);
+  const [sets, setSets] = useState(0);
   const [showPopup, setShowPopup] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [exerciseName, setExerciseName] = useState('로딩 중...');
-  const [exerciseDesc, setExerciseDesc] = useState('운동 설명을 불러오는 중입니다...');
-
+  const [exerciseDesc, setExerciseDesc] = useState('포즈 설명을 불러오는 중입니다...');
+  const [poseSteps, setPoseSteps] = useState<PoseStep[]>([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  
   const navigate = useNavigate();
   const webcamRef = useRef<Webcam>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const cameraRef = useRef<cam.Camera | null>(null);
   const poseRef = useRef<Pose | null>(null);
+  const [searchParams] = useSearchParams();
 
-  // 운동 정보 불러오기
+  //  운동 정보 + 포즈 설명 가져오기
   useEffect(() => {
-    const fetchExerciseInfo = async () => {
+    const routineId = searchParams.get('routineId');
+    if (!routineId) return;
+
+    const fetchExerciseAndPoseDesc = async () => {
       try {
-        const response = await axios.get('https://v-tune-be.onrender.com/api/data/exercises/');
-        const data = response.data[9];
-        if (data) {
-          setExerciseName(data.name || '운동 이름 없음');
-          setExerciseDesc(data.description || '운동 설명 없음');
+        const response = await axios.get(
+          `https://v-tune-be.onrender.com/api/routines/${routineId}/exercises/`
+        );
+
+        const exerciseList = response.data.exercises;
+        if (Array.isArray(exerciseList) && exerciseList.length > 0) {
+          setExercises(exerciseList);
+          
+          // 현재 운동 (첫 번째 운동)
+          const currentExercise = exerciseList[currentExerciseIndex];
+          setExerciseName(currentExercise.name || '운동 이름 없음');
+
+          // 포즈 스텝 데이터 가져오기
+          await loadPoseSteps(currentExercise.exercise_id);
         } else {
           setExerciseName('운동 이름 없음');
-          setExerciseDesc('운동 설명 없음');
+          setExerciseDesc('포즈 설명 없음');
         }
       } catch (error) {
-        console.error('운동 정보 불러오기 실패:', error);
+        console.error('운동 정보 또는 포즈 설명 불러오기 실패:', error);
         setExerciseName('운동 이름 없음');
-        setExerciseDesc('운동 설명 없음');
+        setExerciseDesc('포즈 설명 없음');
       }
     };
-    fetchExerciseInfo();
-  }, []);
+
+    fetchExerciseAndPoseDesc();
+  }, [searchParams, currentExerciseIndex]);
+
+  // 포즈 스텝 데이터를 로드하는 함수
+  const loadPoseSteps = async (exerciseId: number) => {
+    try {
+      const poseStepRes = await axios.get(
+        `https://v-tune-be.onrender.com/api/data/pose-steps/?exercise_id=${exerciseId}`
+      );
+
+      if (Array.isArray(poseStepRes.data) && poseStepRes.data.length > 0) {
+        const steps = poseStepRes.data;
+        setPoseSteps(steps);
+        
+        // 첫 번째 스텝의 설명을 표시
+        setExerciseDesc(steps[0].pose_description || '포즈 설명 없음');
+        setStep(steps[0].step_number);
+        setCurrentStepIndex(0);
+        setSets(0); // 새 운동 시작 시 세트 초기화
+        
+        console.log('총 스텝 수:', steps.length);
+        console.log('마지막 스텝 번호:', steps[steps.length - 1].step_number);
+      } else {
+        setExerciseDesc('포즈 설명 없음');
+      }
+    } catch (error) {
+      console.error('포즈 스텝 불러오기 실패:', error);
+      setExerciseDesc('포즈 설명 없음');
+    }
+  };
 
   // Mediapipe 초기화 및 카메라 연결
   useEffect(() => {
@@ -89,7 +151,7 @@ const StretchScreen: React.FC = () => {
     };
   }, []);
 
-  // Pose 결과 처리 및 canvas에 그리기
+  //  Pose 결과 처리 및 canvas 그리기
   const onResults = async (results: Results) => {
     if (!results.poseLandmarks) return;
 
@@ -101,10 +163,8 @@ const StretchScreen: React.FC = () => {
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw connections
     for (const [startIdx, endIdx] of POSE_CONNECTIONS) {
       const start = results.poseLandmarks[startIdx];
       const end = results.poseLandmarks[endIdx];
@@ -117,7 +177,6 @@ const StretchScreen: React.FC = () => {
       ctx.stroke();
     }
 
-    // Draw keypoints
     for (const pt of results.poseLandmarks) {
       ctx.beginPath();
       ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 4, 0, 2 * Math.PI);
@@ -125,7 +184,6 @@ const StretchScreen: React.FC = () => {
       ctx.fill();
     }
 
-    // Keypoints → 백엔드 전송
     const keypoints: Record<string, [number, number]> = {};
     results.poseLandmarks.forEach((landmark, index) => {
       const key = Object.keys(POSE_LANDMARKS)[index];
@@ -133,41 +191,70 @@ const StretchScreen: React.FC = () => {
     });
 
     try {
+      console.log('백엔드로 전송하는 keypoints:', keypoints);
+      
       const response = await axios.post('https://v-tune-be.onrender.com/api/compare/', {
         keypoints,
       });
 
+      console.log('백엔드 응답:', response.data);
+
       if (response.data.match) {
-        setReps(prev => {
-          if (prev + 1 >= 40) {
-            if (sets < MAX_DOTS) {
-              setSets(s => s + 1);
+        const nextIndex = currentStepIndex + 1;
+        
+        // 모든 스텝을 완료한 경우 (한 세트 완료)
+        if (nextIndex >= poseSteps.length) {
+          if (sets < MAX_DOTS) {
+            // 세트 수 증가하고 첫 번째 스텝으로 리셋
+            setSets(prev => prev + 1);
+            setCurrentStepIndex(0);
+            setExerciseDesc(poseSteps[0]?.pose_description || '포즈 설명 없음');
+            setStep(poseSteps[0]?.step_number || 1);
+            
+            // 3세트 완료 시 다음 운동으로 이동
+            if (sets + 1 >= MAX_DOTS) {
+              console.log('3세트 완료! 다음 운동으로 이동합니다.');
+              
+              // 다음 운동이 있는지 확인
+              if (currentExerciseIndex + 1 < exercises.length) {
+                // 다음 운동으로 이동
+                setCurrentExerciseIndex(prev => prev + 1);
+              } else {
+                // 모든 운동 완료
+                console.log('모든 운동 완료! 루틴이 끝났습니다.');
+                setShowPopup(true);
+                setTimeout(() => {
+                  navigate('/record');
+                }, 3000);
+              }
             }
-            return 1;
           }
-          return prev + 1;
-        });
+        } else {
+          // 다음 스텝으로 진행
+          setCurrentStepIndex(nextIndex);
+          setExerciseDesc(poseSteps[nextIndex].pose_description);
+          setStep(poseSteps[nextIndex].step_number);
+        }
       }
     } catch (error) {
       console.error('백엔드 API 오류:', error);
     }
   };
 
-  // 카메라 전환
   const toggleCamera = useCallback(() => {
     setFacingMode(prev => (prev === "user" ? "environment" : "user"));
   }, []);
 
-  // 1분 후 팝업 + 이동
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowPopup(true);
-      setTimeout(() => {
-        navigate('/record');
-      }, 3000);
-    }, 60000);
-    return () => clearTimeout(timer);
-  }, [navigate]);
+  // 기존 1분 타이머 제거 (모든 운동 완료 시에만 팝업 표시)
+  // useEffect(() => {
+  //   const timer = setTimeout(() => {
+  //     setShowPopup(true);
+  //     setTimeout(() => {
+  //       navigate('/record');
+  //     }, 3000);
+  //   }, 60000);
+  //   return () => clearTimeout(timer);
+  // }, [navigate]);
 
   return (
     <div className="stretch-container">
@@ -205,7 +292,7 @@ const StretchScreen: React.FC = () => {
                   <div key={i} className="dot" />
                 ))}
               </div>
-              <div className="reps">Reps<br />{reps}</div>
+              <div className="reps">Step<br />{step}</div>
             </div>
           </div>
           {showPopup && <Popup />}
