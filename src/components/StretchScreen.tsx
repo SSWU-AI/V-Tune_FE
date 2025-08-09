@@ -167,9 +167,13 @@ const StretchScreen: React.FC = () => {
     });
 
     try {
+      console.log('백엔드로 전송하는 keypoints:', keypoints);
+      
       const response = await axios.post('https://v-tune-be.onrender.com/api/compare/', {
         keypoints,
       });
+
+      console.log('백엔드 응답:', response.data);
 
       if (response.data.match) {
         const nextIndex = currentStepIndex + 1;
