@@ -36,7 +36,7 @@ const HomeScreen: React.FC = () => {
 
   const handleStart = () => {
     if (selected !== null) {
-      // ✅ 루틴 ID를 URL 파라미터로 전달
+      //  루틴 ID를 URL 파라미터로 전달
       navigate(`/stretch?routineId=${selected + 1}`);
     }
   };
