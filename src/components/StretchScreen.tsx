@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { fetchGoogleTTS } from '../api/googleTTS';
+import ttsKey from '../../tts-key.json';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import Webcam from 'react-webcam';
@@ -245,16 +247,37 @@ const StretchScreen: React.FC = () => {
     setFacingMode(prev => (prev === "user" ? "environment" : "user"));
   }, []);
 
-  // 기존 1분 타이머 제거 (모든 운동 완료 시에만 팝업 표시)
-  // useEffect(() => {
-  //   const timer = setTimeout(() => {
-  //     setShowPopup(true);
-  //     setTimeout(() => {
-  //       navigate('/record');
-  //     }, 3000);
-  //   }, 60000);
-  //   return () => clearTimeout(timer);
-  // }, [navigate]);
+  // exerciseDesc가 바뀔 때마다 Google TTS로 읽어주기
+  useEffect(() => {
+    if (!exerciseDesc) return;
+    let audio: HTMLAudioElement | null = null;
+    let isCancelled = false;
+
+    const speak = async () => {
+      try {
+        const audioContent = await fetchGoogleTTS(exerciseDesc, ttsKey.apiKey);
+        if (audioContent && !isCancelled) {
+          // 기존 오디오 중단
+          if (audio) {
+            audio.pause();
+            audio = null;
+          }
+          audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
+          audio.play();
+        }
+      } catch (e) {
+        console.error('TTS 오류:', e);
+      }
+    };
+    speak();
+    return () => {
+      isCancelled = true;
+      if (audio) {
+        audio.pause();
+        audio = null;
+      }
+    };
+  }, [exerciseDesc]);
 
   return (
     <div className="stretch-container">
