@@ -10,7 +10,6 @@ import * as cam from '@mediapipe/camera_utils';
 import '../styles/StretchScreen.css';
 
 import prevIcon from '../assets/icons/prev.svg';
-import nextIcon from '../assets/icons/next.svg';
 import personIcon from '../assets/icons/person.svg';
 import Popup from './Popup';
 
@@ -282,9 +281,10 @@ const StretchScreen: React.FC = () => {
   return (
     <div className="stretch-container">
       <div className="top-bar">
-        <button><img src={prevIcon} alt="Previous" /></button>
+        <button onClick={() => navigate('/')}>
+          <img src={prevIcon} alt="Previous" />
+        </button>
         <h2>{exerciseName}</h2>
-        <button><img src={nextIcon} alt="Next" /></button>
       </div>
 
       <div className="camera-card" onClick={toggleCamera}>
