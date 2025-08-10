@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { fetchGoogleTTS } from '../api/googleTTS';
-import ttsKey from '../../tts-key.json';
+const apiKey = import.meta.env.VITE_GOOGLE_TTS_API_KEY;
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import Webcam from 'react-webcam';
@@ -13,8 +13,6 @@ import prevIcon from '../assets/icons/prev.svg';
 import nextIcon from '../assets/icons/next.svg';
 import personIcon from '../assets/icons/person.svg';
 import Popup from './Popup';
-
-// .
 
 const MAX_DOTS = 3;
 
@@ -257,7 +255,7 @@ const StretchScreen: React.FC = () => {
 
     const speak = async () => {
       try {
-        const audioContent = await fetchGoogleTTS(exerciseDesc, ttsKey.apiKey);
+        const audioContent = await fetchGoogleTTS(exerciseDesc, apiKey);
         if (audioContent && !isCancelled) {
           // 기존 오디오 중단
           if (audio) {
