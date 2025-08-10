@@ -33,3 +33,4 @@ ehthumbs.db
 *.tsbuildinfo
 coverage/
 .cache/
+tts-key.json
