@@ -42,6 +42,7 @@ const StretchScreen: React.FC = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  const [isStepMatched, setIsStepMatched] = useState(false); // True가 되면 해당 step에서 compare 중단
   
   const navigate = useNavigate();
   const webcamRef = useRef<Webcam>(null);
@@ -49,6 +50,62 @@ const StretchScreen: React.FC = () => {
   const cameraRef = useRef<cam.Camera | null>(null);
   const poseRef = useRef<Pose | null>(null);
   const [searchParams] = useSearchParams();
+
+  // TTS 음성 관리를 위한 ref 추가
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const descriptionAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // TTS 재생 함수 - 기존 음성 중단 기능 추가
+  const playTTS = async (text: string, audioType: 'feedback' | 'description' = 'feedback') => {
+    try {
+      // 기존에 재생 중인 모든 음성 중단
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+      if (descriptionAudioRef.current) {
+        descriptionAudioRef.current.pause();
+        descriptionAudioRef.current = null;
+      }
+
+      const audioContent = await fetchGoogleTTS(text, apiKey);
+      if (audioContent) {
+        const audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
+        
+        // 음성 타입에 따라 적절한 ref에 저장
+        if (audioType === 'description') {
+          descriptionAudioRef.current = audio;
+        } else {
+          currentAudioRef.current = audio;
+        }
+
+        // 음성 재생 완료 시 ref 정리
+        audio.addEventListener('ended', () => {
+          if (audioType === 'description') {
+            descriptionAudioRef.current = null;
+          } else {
+            currentAudioRef.current = null;
+          }
+        });
+
+        await audio.play();
+      }
+    } catch (error) {
+      console.error('TTS 오류:', error);
+    }
+  };
+
+  // 모든 TTS 음성 중단 함수
+  const stopAllTTS = () => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    if (descriptionAudioRef.current) {
+      descriptionAudioRef.current.pause();
+      descriptionAudioRef.current = null;
+    }
+  };
 
   //  운동 정보 + 포즈 설명 가져오기
   useEffect(() => {
@@ -150,11 +207,12 @@ const StretchScreen: React.FC = () => {
     return () => {
       cameraRef.current?.stop();
     };
-  }, []);
+  }, [exercises, currentExerciseIndex, step, poseSteps, currentStepIndex, sets]);
 
   //  Pose 결과 처리 및 canvas 그리기
   const onResults = async (results: Results) => {
     if (!results.poseLandmarks) return;
+    if (isStepMatched) return; // 이미 정답이면 더 이상 compare 호출 안 함
 
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -191,37 +249,77 @@ const StretchScreen: React.FC = () => {
       keypoints[key] = [landmark.x, landmark.y];
     });
 
+    // 백엔드에서 기대하는 키포인트만 필터링하여 전송
+    const filteredKeypoints: Record<string, [number, number]> = {};
+    const requiredKeys = [
+      'NOSE', 'LEFT_SHOULDER', 'RIGHT_SHOULDER',
+      'LEFT_ELBOW', 'RIGHT_ELBOW', 'LEFT_WRIST', 'RIGHT_WRIST',
+      'LEFT_HIP', 'RIGHT_HIP', 'LEFT_KNEE', 'RIGHT_KNEE',
+      'LEFT_ANKLE', 'RIGHT_ANKLE'
+    ];
+
+    requiredKeys.forEach(key => {
+      if (keypoints[key]) {
+        filteredKeypoints[key] = keypoints[key];
+      }
+    });
+
     try {
-      console.log('백엔드로 전송하는 keypoints:', keypoints);
+      console.log('원본 keypoints:', keypoints);
+      console.log('필터링된 keypoints:', filteredKeypoints);
+      console.log('현재 exercises 배열:', exercises);
+      console.log('currentExerciseIndex:', currentExerciseIndex);
+      console.log('현재 exercise_id:', exercises[currentExerciseIndex]?.exercise_id);
+      console.log('현재 step_number:', step);
       
-      const response = await axios.post('https://v-tune-be.onrender.com/api/compare/', {
-        keypoints,
-      });
+      // exercise_id가 없으면 요청하지 않음
+      if (!exercises[currentExerciseIndex]?.exercise_id) {
+        console.error('exercise_id가 없어서 백엔드 요청을 건너뜁니다.');
+        return;
+      }
+      
+      const response = await axios.post(
+        'https://v-tune-be.onrender.com/api/compare/',
+        {
+          keypoints: filteredKeypoints,
+        },
+        {
+          params: { 
+            exercise_id: exercises[currentExerciseIndex].exercise_id, 
+            step_number: step 
+          },
+          headers: { 
+            "Content-Type": "application/json" 
+          }
+        }
+      );
 
       console.log('백엔드 응답:', response.data);
 
+      // 백엔드에서 feedback_text 또는 ck_text 필드가 올 수 있으므로 모두 확인
+      const feedbackText = response.data.feedback_text || response.data.ck_text || (response.data.match ? "정답입니다" : "자세를 다시 한 번 확인해 주세요");
+      
       if (response.data.match) {
+        // 정답일 때: 모든 기존 음성 중단 후 정답 피드백만 재생
+        stopAllTTS();
+        await playTTS(feedbackText, 'feedback');
+        setIsStepMatched(true); // 해당 step에서 compare 중단
+
         const nextIndex = currentStepIndex + 1;
-        
         // 모든 스텝을 완료한 경우 (한 세트 완료)
         if (nextIndex >= poseSteps.length) {
           if (sets < MAX_DOTS) {
-            // 세트 수 증가하고 첫 번째 스텝으로 리셋
             setSets(prev => prev + 1);
             setCurrentStepIndex(0);
             setExerciseDesc(poseSteps[0]?.pose_description || '포즈 설명 없음');
             setStep(poseSteps[0]?.step_number || 1);
-            
+            setIsStepMatched(false); // 다음 step에서 다시 compare 시작
             // 3세트 완료 시 다음 운동으로 이동
             if (sets + 1 >= MAX_DOTS) {
               console.log('3세트 완료! 다음 운동으로 이동합니다.');
-              
-              // 다음 운동이 있는지 확인
               if (currentExerciseIndex + 1 < exercises.length) {
-                // 다음 운동으로 이동
                 setCurrentExerciseIndex(prev => prev + 1);
               } else {
-                // 모든 운동 완료
                 console.log('모든 운동 완료! 루틴이 끝났습니다.');
                 setShowPopup(true);
                 setTimeout(() => {
@@ -231,11 +329,15 @@ const StretchScreen: React.FC = () => {
             }
           }
         } else {
-          // 다음 스텝으로 진행
           setCurrentStepIndex(nextIndex);
           setExerciseDesc(poseSteps[nextIndex].pose_description);
           setStep(poseSteps[nextIndex].step_number);
+          setIsStepMatched(false); // 다음 step에서 다시 compare 시작
         }
+      } else {
+        // 오답일 때: 피드백 음성만 재생 (기존 설명 음성은 중단하지 않음)
+        await playTTS(feedbackText, 'feedback');
+        console.log('정답이 아닙니다');
       }
     } catch (error) {
       console.error('백엔드 API 오류:', error);
@@ -246,37 +348,40 @@ const StretchScreen: React.FC = () => {
     setFacingMode(prev => (prev === "user" ? "environment" : "user"));
   }, []);
 
-  // exerciseDesc가 바뀔 때마다 Google TTS로 읽어주기
+  // exerciseDesc가 바뀔 때마다 Google TTS로 읽어주기 - 개선된 버전
   useEffect(() => {
     if (!exerciseDesc) return;
-    let audio: HTMLAudioElement | null = null;
     let isCancelled = false;
 
     const speak = async () => {
       try {
-        const audioContent = await fetchGoogleTTS(exerciseDesc, apiKey);
-        if (audioContent && !isCancelled) {
-          // 기존 오디오 중단
-          if (audio) {
-            audio.pause();
-            audio = null;
-          }
-          audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
-          audio.play();
+        // 기존 설명 음성이 재생 중이면 중단
+        if (descriptionAudioRef.current) {
+          descriptionAudioRef.current.pause();
+          descriptionAudioRef.current = null;
+        }
+
+        if (!isCancelled) {
+          await playTTS(exerciseDesc, 'description');
         }
       } catch (e) {
         console.error('TTS 오류:', e);
       }
     };
+
     speak();
+
     return () => {
       isCancelled = true;
-      if (audio) {
-        audio.pause();
-        audio = null;
-      }
     };
   }, [exerciseDesc]);
+
+  // 컴포넌트 언마운트 시 모든 음성 정리
+  useEffect(() => {
+    return () => {
+      stopAllTTS();
+    };
+  }, []);
 
   return (
     <div className="stretch-container">
