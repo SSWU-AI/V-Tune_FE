@@ -14,6 +14,8 @@ import nextIcon from '../assets/icons/next.svg';
 import personIcon from '../assets/icons/person.svg';
 import Popup from './Popup';
 
+
+
 const MAX_DOTS = 3;
 
 interface PoseStep {
