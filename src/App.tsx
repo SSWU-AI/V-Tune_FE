@@ -8,10 +8,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<HomeScreen />} />
+        <Route path="/" element={<ChatBotScreen />} />
         <Route path="/stretch" element={<StretchScreen />} />
         <Route path="/record" element={<WorkoutRecordScreen />} />
-        <Route path="/chatbot" element={<ChatBotScreen />} />
+        <Route path="/home" element={<HomeScreen />} />
       </Routes>
     </BrowserRouter>
   );
