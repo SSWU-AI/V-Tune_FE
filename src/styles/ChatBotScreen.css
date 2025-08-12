@@ -13,7 +13,7 @@ html, body {
 .chat-container {
   background-color: #0f0f0f;
   color: white;
-  height: 100dvh;              
+  height: 100dvh;
   min-height: 100vh;
   padding-top: calc(24px + env(safe-area-inset-top));
   padding-bottom: calc(24px + env(safe-area-inset-bottom));
@@ -21,17 +21,19 @@ html, body {
   padding-right: 16px;
   display: flex;
   flex-direction: column;
-  align-items: stretch;         
+  align-items: stretch;
   box-sizing: border-box;
-  max-width: 480px;              
-  margin: 0 auto;   
-  touch-action: pan-y;             
+  max-width: 480px;
+  margin: 0 auto;
+  touch-action: pan-y;
 }
 
 .icon-20 { width: 20px; height: 20px; display: block; }
 
+/* 상단바 */
 .chat-topbar {
-  width: 100%;                   
+  position: relative;
+  width: 100%;
   height: 56px;
   display: flex;
   align-items: center;
@@ -39,45 +41,74 @@ html, body {
   padding: 0 12px;
   border-bottom: 1px solid #202020;
   flex-shrink: 0;
+  justify-content: center; /* 중앙 정렬 */
 }
 
 .chat-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   margin: 0;
   font-size: 18px;
   font-weight: 700;
 }
 
+/* 뒤로가기 버튼 최소 스타일 */
+.back-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  width: auto;
+  height: auto;
+  cursor: pointer;
+}
+.back-btn img {
+  width: 20px;
+  height: 20px;
+}
+
 .chat-area {
-  width: 100%;                   
+  width: 100%;
   flex: 1;
-  min-height: 0;                
+  min-height: 0;
   overflow-y: auto;
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-
-
 .chat-area { scrollbar-width: none; -ms-overflow-style: none; }
 .chat-area::-webkit-scrollbar { display: none; }
 
+/* 버블 각각 radius */
 .bubble {
   max-width: 78%;
   padding: 10px 14px;
-  border-radius: 16px;
   color: #fff;
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.4;
   box-shadow: 0 2px 6px rgba(0,0,0,.25);
 }
-.bubble.bot  { background: #262626; align-self: flex-start; }
-.bubble.user { background: #4a90e2; align-self: flex-end; }
-
+.bubble.bot  {
+  background: #262626;
+  align-self: flex-start;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  border-bottom-right-radius: 16px;
+  border-bottom-left-radius: 4px;
+}
+.bubble.user {
+  background: #1F4EF5;
+  align-self: flex-end;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 4px;
+}
 
 .chat-inputbar {
-  width: 100%;                  
+  width: 100%;
   padding: 10px;
   border-top: 1px solid #202020;
   background: #0f0f0f;
@@ -108,21 +139,12 @@ html, body {
   background: #1a1a1a;
   color: #fff;
   cursor: pointer;
-
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   line-height: 0;
 }
-
-
-.chat-topbar .icon-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-}
-
 
 .icon-btn img,
 .icon-20 {
