@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import vTuneIcon from '../assets/icons/vtune.svg';
 import '../styles/HomeScreen.css';
@@ -29,6 +29,17 @@ const routines = [
 const HomeScreen: React.FC = () => {
   const [selected, setSelected] = useState<number | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("selectedRoutineId");
+    if (raw) {
+      const id = Number(raw);              // 1..N
+      sessionStorage.removeItem("selectedRoutineId"); // 1회성 적용
+      if (!Number.isNaN(id) && id >= 1 && id <= routines.length) {
+        setSelected(id - 1);               // index로 변환
+      }
+    }
+  }, []);
 
   const handleCardClick = (index: number) => {
     setSelected(prev => (prev === index ? null : index));
@@ -65,6 +76,14 @@ const HomeScreen: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {/* 챗봇 버튼 */}
+      <button
+        className="chatbot-button"
+        onClick={() => navigate("/chatbot")}
+      >
+        챗봇과 대화하기
+      </button>
 
       <button
         className={`start-button ${selected !== null ? 'active' : ''}`}
