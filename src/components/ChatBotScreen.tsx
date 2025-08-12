@@ -133,7 +133,9 @@ const ChatBotScreen: React.FC = () => {
     audioUrlRef.current = url;
     if (!audioRef.current) audioRef.current = new Audio();
     audioRef.current.src = url;
-    try { await audioRef.current.play(); } catch {}
+    try { await audioRef.current.play(); } catch (error) {
+      console.warn("Audio play failed:", error);
+    }
   };
 
   /* 시스템 프롬프트 */
@@ -224,12 +226,13 @@ const ChatBotScreen: React.FC = () => {
           console.warn("TTS 실패:", err);
         }
       }
-    } catch (e: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "요청 실패";
       setMessages(prev => {
         const copy = [...prev];
         for (let i = copy.length - 1; i >= 0; i--) {
           if (copy[i].role === "bot" && copy[i].text === "🤖 생각 중...") {
-            copy[i] = { role: "bot", text: `❌ 오류: ${e?.message || "요청 실패"}` };
+            copy[i] = { role: "bot", text: `❌ 오류: ${errorMessage}` };
             break;
           }
         }
@@ -260,7 +263,8 @@ const ChatBotScreen: React.FC = () => {
       try {
         const { text } = await transcribeBlob(blob);
         await sendText((text || "").trim() || "(인식 결과 없음)");
-      } catch {
+      } catch (error) {
+        console.warn("STT 실패:", error);
         setMessages(prev => [...prev, { role: "bot", text: "❌ 음성 인식 실패" }]);
       }
     };
