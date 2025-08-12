@@ -22,10 +22,11 @@ function assertReady() {
   if (!OPENAI_API_KEY) throw new Error("VITE_OPENAI_API_KEY 가 설정되지 않았습니다.");
 }
 
-/* ---------- 홈 화면 자동 선택 ---------- */
-function setHomeSelectedRoutine(routineId: number) {
-  sessionStorage.setItem("selectedRoutineId", String(routineId)); // 1..N
+/* ---------- 스트레칭 화면으로 루틴 전달 ---------- */
+function setSelectedRoutineForStretching(routineId: number) {
+  sessionStorage.setItem("stretchingRoutineId", String(routineId)); // 1..N
 }
+
 const routineNames = ["척추 유연성 루틴", "몸통 비틀기 루틴", "전신 이완 루틴", "하체 강화 루틴"];
 
 /* 숨김 마커/정리 */
@@ -60,6 +61,20 @@ function extractRoutineIdFromText(text: string): number | null {
   return null;
 }
 
+/* 운동 시작 의사 확인 패턴 */
+function isStartConfirmation(text: string): boolean {
+  const confirmPatterns = [
+    /네\s*,?\s*(시작|해주세요|좋아요|그래요)/,
+    /좋아요?\s*,?\s*(시작|해주세요|그래요)/,
+    /알겠어요?\s*,?\s*(시작|해주세요)/,
+    /그래요?\s*,?\s*(시작|해주세요)/,
+    /응\s*,?\s*(시작|해주세요|좋아요|그래요)/,
+    /(시작|해주세요|할게요|하겠어요|고고)/,
+    /^(네|응|좋아|알겠어|그래|yes|ok)$/i,
+  ];
+  return confirmPatterns.some(pattern => pattern.test(text.trim()));
+}
+
 const ChatBotScreen: React.FC = () => {
   const navigate = useNavigate();
 
@@ -70,6 +85,7 @@ const ChatBotScreen: React.FC = () => {
   const [input, setInput] = useState("");
   const [voiceOn, setVoiceOn] = useState(true);
   const [thinking, setThinking] = useState(false);
+  const [pendingRoutineId, setPendingRoutineId] = useState<number | null>(null); // 시작 대기 중인 루틴
 
   // refs (한 번만 선언)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -95,8 +111,8 @@ const ChatBotScreen: React.FC = () => {
     startXRef.current = t.clientX;
     startYRef.current = t.clientY;
     startTimeRef.current = e.timeStamp;
-    trackingRef.current = t.clientX <= EDGE
-    };
+    trackingRef.current = t.clientX <= EDGE;
+  };
 
   const onTouchMove = (e: React.TouchEvent) => {
     if (!trackingRef.current) return;
@@ -105,7 +121,7 @@ const ChatBotScreen: React.FC = () => {
     const dx = t.clientX - startXRef.current;
     const dy = Math.abs(t.clientY - startYRef.current);
     if (dx > 10 && dy < MAX_DY) e.preventDefault();
-    };
+  };
     
   const onTouchEnd = (e: React.TouchEvent) => {
     if (!trackingRef.current) return;
@@ -119,7 +135,7 @@ const ChatBotScreen: React.FC = () => {
         cleanupAudio();
         navigate("/");
     }
-    };
+  };
 
   const cleanupAudio = () => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
@@ -176,9 +192,40 @@ const ChatBotScreen: React.FC = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
 
+    // 운동 시작 확인 중이고 긍정 답변인 경우
+    if (pendingRoutineId && isStartConfirmation(trimmed)) {
+      setMessages(prev => [...prev, { role: "user", text: trimmed }]);
+      
+      // 세션 스토리지에 루틴 저장하고 스트레칭 화면으로 이동
+      setSelectedRoutineForStretching(pendingRoutineId);
+      
+      const startMessage = `좋습니다! ${routineNames[pendingRoutineId - 1]}을 시작하겠습니다.`;
+      setMessages(prev => [...prev, { role: "bot", text: startMessage }]);
+      
+      if (voiceOn && GOOGLE_TTS_KEY) {
+        try {
+          const audioBase64 = await fetchGoogleTTS(startMessage, GOOGLE_TTS_KEY);
+          if (audioBase64) await playBase64Mp3(audioBase64);
+        } catch (err) {
+          console.warn("TTS 실패:", err);
+        }
+      }
+      
+      setPendingRoutineId(null);
+      
+      // 1초 후 스트레칭 화면으로 이동
+      setTimeout(() => {
+        cleanupAudio();
+        navigate("/stretch");
+      }, 1000);
+      
+      return;
+    }
+
     setMessages(prev => [...prev, { role: "user", text: trimmed }, { role: "bot", text: "🤖 생각 중..." }]);
     setInput("");
     setThinking(true);
+    setPendingRoutineId(null); // 새 질문이므로 대기 상태 초기화
 
     try {
       const body = {
@@ -197,33 +244,46 @@ const ChatBotScreen: React.FC = () => {
       const data = await res.json();
       const raw = data?.choices?.[0]?.message?.content || "";
 
-      const picked    = extractRoutineIdFromText(raw);
+      const picked = extractRoutineIdFromText(raw);
       const finalText = toPlainText(raw);
-      const homeLine  = picked ? `홈으로 이동하세요 "${routineNames[picked - 1]}"을 미리 선택해놓았어요.` : "";
 
-      // 마지막 "🤖 생각 중..." 버블을 최종 텍스트로 교체, 안내는 별도 추가
       setMessages(prev => {
         const copy = [...prev];
         for (let i = copy.length - 1; i >= 0; i--) {
-          if (copy[i].role === "bot" && copy[i].text === "🤖 생각 중...") {
+          if (copy[i].role === "bot" && copy[i].text === "생각 중...") {
             copy[i] = { role: "bot", text: finalText || "응답을 받지 못했어요." };
             break;
           }
         }
-        if (homeLine) copy.push({ role: "bot", text: homeLine });
         return copy;
       });
 
-      if (picked) setHomeSelectedRoutine(picked);
-
-      // TTS: 본문 + 안내를 합쳐 한 번만
-      const speech = [finalText, homeLine].filter(Boolean).join("\n");
-      if (voiceOn && GOOGLE_TTS_KEY && speech) {
-        try {
-          const audioBase64 = await fetchGoogleTTS(speech, GOOGLE_TTS_KEY);
-          if (audioBase64) await playBase64Mp3(audioBase64);
-        } catch (err) {
-          console.warn("TTS 실패:", err);
+      // 루틴이 추천된 경우 운동 시작 의사 확인 메시지 추가
+      if (picked) {
+        const confirmMessage = "운동을 시작하시겠습니까?";
+        setTimeout(() => {
+          setMessages(prev => [...prev, { role: "bot", text: confirmMessage }]);
+          setPendingRoutineId(picked);
+          
+          // TTS: 추천 내용 + 시작 확인 메시지
+          const fullSpeech = [finalText, confirmMessage].join("\n");
+          if (voiceOn && GOOGLE_TTS_KEY && fullSpeech) {
+            fetchGoogleTTS(fullSpeech, GOOGLE_TTS_KEY)
+              .then(audioBase64 => {
+                if (audioBase64) return playBase64Mp3(audioBase64);
+              })
+              .catch(err => console.warn("TTS 실패:", err));
+          }
+        }, 500);
+      } else {
+        // 루틴 추천이 아닌 일반 답변의 경우 TTS만
+        if (voiceOn && GOOGLE_TTS_KEY && finalText) {
+          try {
+            const audioBase64 = await fetchGoogleTTS(finalText, GOOGLE_TTS_KEY);
+            if (audioBase64) await playBase64Mp3(audioBase64);
+          } catch (err) {
+            console.warn("TTS 실패:", err);
+          }
         }
       }
     } catch (error: unknown) {
