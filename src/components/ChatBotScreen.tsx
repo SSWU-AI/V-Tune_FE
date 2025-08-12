@@ -196,9 +196,6 @@ const ChatBotScreen: React.FC = () => {
     if (pendingRoutineId && isStartConfirmation(trimmed)) {
       setMessages(prev => [...prev, { role: "user", text: trimmed }]);
       
-      // 세션 스토리지에 루틴 저장하고 스트레칭 화면으로 이동
-      setSelectedRoutineForStretching(pendingRoutineId);
-      
       const startMessage = `좋습니다! ${routineNames[pendingRoutineId - 1]}을 시작하겠습니다.`;
       setMessages(prev => [...prev, { role: "bot", text: startMessage }]);
       
@@ -211,12 +208,16 @@ const ChatBotScreen: React.FC = () => {
         }
       }
       
+      // sessionStorage에도 저장 (fallback용)
+      setSelectedRoutineForStretching(pendingRoutineId);
+      
+      const routineIdToPass = pendingRoutineId;
       setPendingRoutineId(null);
       
-      // 1초 후 스트레칭 화면으로 이동
+      // URL 파라미터로 루틴 ID 전달
       setTimeout(() => {
         cleanupAudio();
-        navigate("/stretch");
+        navigate(`/stretch?routineId=${routineIdToPass}`);
       }, 1000);
       
       return;
