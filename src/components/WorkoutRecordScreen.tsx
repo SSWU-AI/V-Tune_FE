@@ -63,7 +63,7 @@ const WorkoutRecordScreen: React.FC = () => {
         if (Array.isArray(exerciseList) && exerciseList.length > 0) {
           const exerciseRecords: ExerciseRecord[] = exerciseList.map((exercise, index) => ({
             name: exercise.name,
-            sets: exercise.repetition, // repetition을 sets로 사용
+            sets: 3, // 세트수를 3개로 고정
             score: generateRandomScore(), // 실제로는 백엔드에서 점수를 받아와야 함
             icon: exerciseIcons[index % exerciseIcons.length] // 순서대로 아이콘 적용
           }));
@@ -79,10 +79,10 @@ const WorkoutRecordScreen: React.FC = () => {
         console.error('운동 정보 불러오기 실패:', error);
         // 에러 시 기본 데이터
         setExercises([
-          { name: '스트레칭', sets: 2, score: 100, icon: stretchIcon },
+          { name: '스트레칭', sets: 3, score: 100, icon: stretchIcon },
           { name: '런지', sets: 3, score: 85, icon: lungeIcon },
           { name: '플랭크', sets: 3, score: 30, icon: plankIcon },
-          { name: '사이드 레그 레이즈', sets: 1, score: 70, icon: sidelegIcon },
+          { name: '사이드 레그 레이즈', sets: 3, score: 70, icon: sidelegIcon },
         ]);
       } finally {
         setLoading(false);
