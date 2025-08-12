@@ -247,10 +247,11 @@ const ChatBotScreen: React.FC = () => {
       const picked = extractRoutineIdFromText(raw);
       const finalText = toPlainText(raw);
 
+      // 마지막 "🤖 생각 중..." 버블을 최종 텍스트로 교체
       setMessages(prev => {
         const copy = [...prev];
         for (let i = copy.length - 1; i >= 0; i--) {
-          if (copy[i].role === "bot" && copy[i].text === "생각 중...") {
+          if (copy[i].role === "bot" && copy[i].text === "🤖 생각 중...") {
             copy[i] = { role: "bot", text: finalText || "응답을 받지 못했어요." };
             break;
           }
