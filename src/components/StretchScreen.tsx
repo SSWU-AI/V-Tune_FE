@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import Webcam from 'react-webcam';
 import { Pose, POSE_LANDMARKS, POSE_CONNECTIONS } from '@mediapipe/pose';
-import type { Results } from '@mediapipe/pose';
+import type { Results, Landmark } from '@mediapipe/pose';
 import * as cam from '@mediapipe/camera_utils';
 import '../styles/StretchScreen.css';
 
@@ -14,6 +14,10 @@ import personIcon from '../assets/icons/person.svg';
 import Popup from './Popup';
 
 const MAX_DOTS = 3;
+
+// 타이밍 설정
+const POSE_WAIT_TIME = 10000;       // 10초 - 운동 설명 후 자세 대기
+const NEXT_STEP_WAIT_TIME = 3000;   // 3초 - (정답) 피드백 후 다음 스텝 대기
 
 interface PoseStep {
   id: number;
@@ -49,15 +53,10 @@ const StretchScreen: React.FC = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [isStepMatched, setIsStepMatched] = useState(false);
-
-  // 음성 재생 상태
+  
   const [isPlayingTTS, setIsPlayingTTS] = useState(false);
-  const [hasFeedbackPlayed, setHasFeedbackPlayed] = useState(false);
-
-  // 좌표 처리 간격
-  const lastProcessedTimeRef = useRef<number>(0);
-  const PROCESS_INTERVAL = 15000; // 15초
+  const [currentPhase, setCurrentPhase] =
+    useState<'loading' | 'description' | 'waiting' | 'feedback' | 'moving'>('loading');
 
   const navigate = useNavigate();
   const webcamRef = useRef<Webcam>(null);
@@ -66,134 +65,84 @@ const StretchScreen: React.FC = () => {
   const poseRef = useRef<Pose | null>(null);
   const [searchParams] = useSearchParams();
 
-  // 최신 상태를 onResults에서 안전하게 읽기 위한 refs
-  const isPlayingTTSRef = useRef(isPlayingTTS);
-  const isStepMatchedRef = useRef(isStepMatched);
-  const hasFeedbackPlayedRef = useRef(hasFeedbackPlayed);
-  const exercisesRef = useRef(exercises);
-  const currentExerciseIndexRef = useRef(currentExerciseIndex);
-  const stepRef = useRef(step);
-
-  useEffect(() => { isPlayingTTSRef.current = isPlayingTTS; }, [isPlayingTTS]);
-  useEffect(() => { isStepMatchedRef.current = isStepMatched; }, [isStepMatched]);
-  useEffect(() => { hasFeedbackPlayedRef.current = hasFeedbackPlayed; }, [hasFeedbackPlayed]);
-  useEffect(() => { exercisesRef.current = exercises; }, [exercises]);
-  useEffect(() => { currentExerciseIndexRef.current = currentExerciseIndex; }, [currentExerciseIndex]);
-  useEffect(() => { stepRef.current = step; }, [step]);
-
-  // --- TTS Queue/Manager ---
-  type TTSType = 'feedback' | 'description';
-  type TTSTask = { text: string; type: TTSType; resolve?: () => void; };
-
-  const ttsQueueRef = useRef<TTSTask[]>([]);
-  const ttsProcessingRef = useRef(false);
-  const lastDescKeyRef = useRef<string>('');
-
-  // 오디오 핸들
+  // 타이머/오디오/랜드마크
+  const poseWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nextStepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
-  const descriptionAudioRef = useRef<HTMLAudioElement | null>(null);
+  const latestLandmarksRef = useRef<Landmark[] | null>(null);
+  const isProcessingRef = useRef(false); // 평가 중복 방지
 
-  const stopAllTTS = () => {
+  // 타이머 정리
+  const clearAllTimers = useCallback(() => {
+    if (poseWaitTimerRef.current) {
+      clearTimeout(poseWaitTimerRef.current);
+      poseWaitTimerRef.current = null;
+    }
+    if (nextStepTimerRef.current) {
+      clearTimeout(nextStepTimerRef.current);
+      nextStepTimerRef.current = null;
+    }
+  }, []);
+
+  // TTS 정지
+  const stopTTS = useCallback(() => {
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
       currentAudioRef.current = null;
     }
-    if (descriptionAudioRef.current) {
-      descriptionAudioRef.current.pause();
-      descriptionAudioRef.current = null;
-    }
     setIsPlayingTTS(false);
-  };
+  }, []);
 
-  const internalPlay = useCallback(async (text: string, type: TTSType) => {
-    try {
+  // TTS 재생
+  const playTTS = useCallback(async (text: string): Promise<boolean> => {
+    if (!text.trim() || !apiKey) return false;
+
+    return new Promise((resolve) => {
+      // 이전 오디오 종료 (다음 스텝 설명이 끊기지 않도록 moveToNextStep 전에만 호출됨)
+      stopTTS();
       setIsPlayingTTS(true);
 
-      if (type === 'feedback' && currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current = null;
-      }
-      if (type === 'description' && descriptionAudioRef.current) {
-        descriptionAudioRef.current.pause();
-        descriptionAudioRef.current = null;
-      }
+      fetchGoogleTTS(text, apiKey)
+        .then((audioContent) => {
+          if (!audioContent) {
+            setIsPlayingTTS(false);
+            resolve(false);
+            return;
+          }
+          const audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
+          currentAudioRef.current = audio;
 
-      const audioContent = await fetchGoogleTTS(text, apiKey);
-      if (!audioContent) {
-        setIsPlayingTTS(false);
-        return;
-      }
+          const handleEnded = () => {
+            setIsPlayingTTS(false);
+            currentAudioRef.current = null;
+            resolve(true);
+          };
+          const handleError = () => {
+            setIsPlayingTTS(false);
+            currentAudioRef.current = null;
+            resolve(false);
+          };
 
-      const audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
-      if (type === 'description') descriptionAudioRef.current = audio;
-      else currentAudioRef.current = audio;
-
-      await new Promise<void>((resolve, reject) => {
-        audio.addEventListener('ended', () => {
+          audio.addEventListener('ended', handleEnded);
+          audio.addEventListener('error', handleError);
+          audio.play().catch(handleError);
+        })
+        .catch(() => {
           setIsPlayingTTS(false);
-          if (type === 'description') descriptionAudioRef.current = null;
-          else currentAudioRef.current = null;
-          resolve();
+          resolve(false);
         });
-        audio.addEventListener('error', (e) => {
-          setIsPlayingTTS(false);
-          if (type === 'description') descriptionAudioRef.current = null;
-          else currentAudioRef.current = null;
-          reject(e);
-        });
-        audio.play().catch(reject);
-      });
-    } catch (e) {
-      console.error('TTS 재생 오류:', e);
-      setIsPlayingTTS(false);
-    }
-  }, [apiKey]);
-
-  const processQueue = useCallback(async () => {
-    if (ttsProcessingRef.current) return;
-    ttsProcessingRef.current = true;
-    try {
-      while (ttsQueueRef.current.length) {
-        const task = ttsQueueRef.current.shift()!;
-        await internalPlay(task.text, task.type);
-        task.resolve?.();
-        await new Promise(r => setTimeout(r, 80)); // 약간의 인터벌
-      }
-    } finally {
-      ttsProcessingRef.current = false;
-    }
-  }, [internalPlay]);
-
-  const enqueueTTS = useCallback((text: string, type: TTSType) => {
-    return new Promise<void>((resolve) => {
-      if (!text) { resolve(); return; }
-
-      if (type === 'feedback') {
-        // 선점: 재생 중인 오디오 중단 + 큐를 피드백으로 갈아끼우기
-        if (descriptionAudioRef.current) {
-          descriptionAudioRef.current.pause();
-          descriptionAudioRef.current = null;
-        }
-        if (currentAudioRef.current) {
-          currentAudioRef.current.pause();
-          currentAudioRef.current = null;
-        }
-        ttsQueueRef.current = [{ text, type, resolve }];
-      } else {
-        // description: 동일 텍스트 중복 대기 금지
-        const dupInQueue = ttsQueueRef.current.some(t => t.type === 'description' && t.text === text);
-        const playingDesc = !!descriptionAudioRef.current;
-        if (dupInQueue || playingDesc) { resolve(); return; }
-        ttsQueueRef.current.push({ text, type, resolve });
-      }
-
-      processQueue();
     });
-  }, [processQueue]);
+  }, [apiKey, stopTTS]);
 
-  // 다음 스텝 이동
+  // === 3단계: 다음 스텝으로 이동 (먼저 선언!) ===
   const moveToNextStep = useCallback(() => {
-    lastProcessedTimeRef.current = 0;
+    if (isProcessingRef.current) return;
+
+    setCurrentPhase('loading');
+    clearAllTimers();
+    stopTTS(); // 이전 피드백이 끝난 상태에서 안전 정리
+    latestLandmarksRef.current = null;
 
     const nextIndex = currentStepIndex + 1;
 
@@ -201,163 +150,87 @@ const StretchScreen: React.FC = () => {
       const nextSets = Math.min(sets + 1, MAX_DOTS);
       setSets(nextSets);
       setCurrentStepIndex(0);
-      setExerciseDesc(poseSteps[0]?.pose_description || '포즈 설명 없음');
       setStep(poseSteps[0]?.step_number || 1);
-      setIsStepMatched(false);
-      setHasFeedbackPlayed(false);
+      if (poseSteps.length > 0) {
+        setExerciseDesc(poseSteps[0].pose_description || '포즈 설명 없음');
+      }
 
       if (nextSets >= MAX_DOTS) {
         if (currentExerciseIndex + 1 < exercises.length) {
           setCurrentExerciseIndex(prev => prev + 1);
+          setSets(0); // 새 운동 시작
+          return;
         } else {
           setShowPopup(true);
-          setTimeout(() => {
-            navigate('/record');
-          }, 3000);
+          setTimeout(() => navigate('/record'), 3000);
+          return;
         }
       }
     } else {
       setCurrentStepIndex(nextIndex);
-      setExerciseDesc(poseSteps[nextIndex].pose_description);
       setStep(poseSteps[nextIndex].step_number);
-      setIsStepMatched(false);
-      setHasFeedbackPlayed(false);
-    }
-  }, [currentStepIndex, poseSteps, sets, currentExerciseIndex, exercises, navigate]);
-
-  // 운동/포즈 설명 로딩
-  useEffect(() => {
-    const routineId = searchParams.get('routineId');
-    
-    // URL 파라미터에서 routineId를 찾지 못한 경우 sessionStorage에서 확인
-    const finalRoutineId = routineId || sessionStorage.getItem("stretchingRoutineId");
-    
-    if (!finalRoutineId) {
-      console.error('루틴 ID가 없습니다.');
-      // 홈으로 리다이렉트
-      navigate('/');
-      return;
-    }
-
-    console.log('사용할 루틴 ID:', finalRoutineId);
-
-    const fetchExerciseAndPoseDesc = async () => {
-      try {
-        const response = await axios.get(
-          `https://v-tune-be.onrender.com/api/routines/${finalRoutineId}/exercises/`
-        );
-
-        const exerciseList = response.data.exercises;
-        if (Array.isArray(exerciseList) && exerciseList.length > 0) {
-          setExercises(exerciseList);
-
-          const currentExercise = exerciseList[currentExerciseIndex];
-          setExerciseName(currentExercise?.name || '운동 이름 없음');
-
-          await loadPoseSteps(currentExercise.exercise_id);
-        } else {
-          setExerciseName('운동 이름 없음');
-          setExerciseDesc('포즈 설명 없음');
-        }
-      } catch (error) {
-        console.error('운동 정보 또는 포즈 설명 불러오기 실패:', error);
-        setExerciseName('운동 이름 없음');
-        setExerciseDesc('포즈 설명 없음');
+      if (poseSteps[nextIndex]) {
+        setExerciseDesc(poseSteps[nextIndex].pose_description || '포즈 설명 없음');
       }
+    }
+  }, [clearAllTimers, stopTTS, currentStepIndex, poseSteps, sets, currentExerciseIndex, exercises, navigate]);
+
+  // 1단계: 운동 설명
+  const startDescriptionPhase = useCallback(async () => {
+    if (!exerciseDesc || exerciseDesc === '포즈 설명을 불러오는 중입니다...') return;
+
+    setCurrentPhase('description');
+    clearAllTimers();
+    latestLandmarksRef.current = null;
+
+    await playTTS(exerciseDesc);
+    // 설명 끝났으면 10초 대기 시작
+    setCurrentPhase('waiting');
+    poseWaitTimerRef.current = setTimeout(() => {
+      evaluatePoseAndGiveFeedback();
+    }, POSE_WAIT_TIME);
+  }, [exerciseDesc, clearAllTimers, playTTS]);
+
+  // 2단계: 자세 평가 & 피드백 (오답이면 10초 대기 반복, 정답이면 3초 후 다음)
+  const evaluatePoseAndGiveFeedback = useCallback(async () => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+
+    setCurrentPhase('feedback');
+    clearAllTimers();
+
+    const requeueWait = () => {
+      // 오답/미인식/오류 → 10초 후 다시 평가 루프
+      setCurrentPhase('waiting');
+      latestLandmarksRef.current = null; // 새로 캡처하도록 리셋
+      isProcessingRef.current = false;   // 평가 가능 상태 복구
+      poseWaitTimerRef.current = setTimeout(() => {
+        evaluatePoseAndGiveFeedback();
+      }, POSE_WAIT_TIME);
     };
 
-    fetchExerciseAndPoseDesc();
-  }, [searchParams, currentExerciseIndex, navigate]);
-
-  // 포즈 스텝 로딩
-  const loadPoseSteps = async (exerciseId: number) => {
     try {
-      const poseStepRes = await axios.get(
-        `https://v-tune-be.onrender.com/api/data/pose-steps/?exercise_id=${exerciseId}`
-      );
+      let feedbackText = '';
 
-      if (Array.isArray(poseStepRes.data) && poseStepRes.data.length > 0) {
-        const steps = poseStepRes.data;
-        setPoseSteps(steps);
-
-        setExerciseDesc(steps[0].pose_description || '포즈 설명 없음');
-        setStep(steps[0].step_number);
-        setCurrentStepIndex(0);
-        setSets(0);
-        setHasFeedbackPlayed(false);
-
-        console.log('총 스텝 수:', steps.length);
-        console.log('마지막 스텝 번호:', steps[steps.length - 1].step_number);
-      } else {
-        setExerciseDesc('포즈 설명 없음');
+      if (!latestLandmarksRef.current) {
+        feedbackText = '카메라에서 자세를 인식하지 못했어요. 다시 한 번 자세를 잡아볼게요.';
+        await playTTS(feedbackText);
+        requeueWait();
+        return;
       }
-    } catch (error) {
-      console.error('포즈 스텝 불러오기 실패:', error);
-      setExerciseDesc('포즈 설명 없음');
-    }
-  };
 
-  // 결과 처리 & 그리기 & 비교 호출
-  const onResults = useCallback(async (results: Results) => {
-    if (!results.poseLandmarks) return;
+      // 키포인트 구성
+      const filteredKeypoints: Record<string, [number, number]> = {};
+      for (const name of REQUIRED_KEYS) {
+        const idx = (POSE_LANDMARKS as any)[name];
+        const lm = latestLandmarksRef.current[idx];
+        if (lm) filteredKeypoints[name] = [lm.x, lm.y];
+      }
 
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    const video = webcamRef.current?.video;
-    if (!ctx || !canvas || !video) return;
-
-    // 캔버스 사이즈 & 클리어
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // 연결선
-    for (const [startIdx, endIdx] of POSE_CONNECTIONS) {
-      const start = results.poseLandmarks[startIdx];
-      const end = results.poseLandmarks[endIdx];
-      if (!start || !end) continue;
-
-      ctx.beginPath();
-      ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
-      ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
-      ctx.strokeStyle = '#00FF88';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-
-    // 포인트
-    for (const pt of results.poseLandmarks) {
-      ctx.beginPath();
-      ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 4, 0, 2 * Math.PI);
-      ctx.fillStyle = '#00FF88';
-      ctx.fill();
-    }
-
-    // 백엔드 호출 조건 (그리기는 항상 진행)
-    const currentTime = Date.now();
-    const shouldProcessPose = currentTime - lastProcessedTimeRef.current >= PROCESS_INTERVAL;
-
-    if (!shouldProcessPose) return;
-    if (isStepMatchedRef.current) return;
-    if (isPlayingTTSRef.current) return;
-
-    lastProcessedTimeRef.current = currentTime;
-    console.log('15초 간격으로 포즈 분석 실행');
-
-    // 필수 키만 정확한 인덱스로 필터링
-    const filteredKeypoints: Record<string, [number, number]> = {};
-    for (const name of REQUIRED_KEYS) {
-      const idx = (POSE_LANDMARKS as Record<string, number>)[name];
-      const lm = results.poseLandmarks[idx];
-      if (lm) filteredKeypoints[name] = [lm.x, lm.y];
-    }
-
-    try {
-      const exIdx = currentExerciseIndexRef.current;
-      const currentEx = exercisesRef.current[exIdx];
-
+      const currentEx = exercises[currentExerciseIndex];
       if (!currentEx?.exercise_id) {
-        console.error('exercise_id가 없어서 백엔드 요청을 건너뜁니다.');
+        await playTTS('운동 정보를 불러오지 못했어요. 다시 시도해볼게요.');
+        requeueWait();
         return;
       }
 
@@ -365,59 +238,129 @@ const StretchScreen: React.FC = () => {
         'https://v-tune-be.onrender.com/api/compare/',
         { keypoints: filteredKeypoints },
         {
-          params: {
-            exercise_id: currentEx.exercise_id,
-            step_number: stepRef.current
-          },
-          headers: { "Content-Type": "application/json" }
+          params: { exercise_id: currentEx.exercise_id, step_number: step },
+          headers: { "Content-Type": "application/json" },
+          timeout: 8000
         }
       );
 
-      console.log('백엔드 응답:', response.data);
-      const feedbackText =
-        response.data.feedback_text ||
-        response.data.ck_text ||
-        (response.data.match ? "정답입니다" : "자세를 다시 한 번 확인해 주세요");
+      const match = !!response.data?.match;
+      feedbackText = response.data.feedback_text ||
+                     response.data.ck_text ||
+                     (match ? "완벽해요! 자세가 정확합니다!" : "조금만 더! 방금 안내한 부분을 신경 써주세요.");
 
-      if (response.data.match) {
-        if (!hasFeedbackPlayedRef.current) {
-          hasFeedbackPlayedRef.current = true;
-          setHasFeedbackPlayed(true);
-          setIsStepMatched(true);
+      await playTTS(feedbackText);
 
-          // 피드백 끝난 뒤 다음 스텝
-          enqueueTTS(feedbackText, 'feedback')
-            .then(() => setTimeout(moveToNextStep, 500))
-            .catch(() => setTimeout(moveToNextStep, 500));
-        }
+      if (match) {
+        // 정답 → 3초 대기 후 다음 단계
+        setCurrentPhase('moving');
+        isProcessingRef.current = false;
+        nextStepTimerRef.current = setTimeout(() => {
+          moveToNextStep();
+        }, NEXT_STEP_WAIT_TIME);
       } else {
-        if (!hasFeedbackPlayedRef.current) {
-          hasFeedbackPlayedRef.current = true;
-          setHasFeedbackPlayed(true);
-          enqueueTTS(feedbackText, 'feedback')
-            .then(() => {
-              setTimeout(() => {
-                hasFeedbackPlayedRef.current = false;
-                setHasFeedbackPlayed(false);
-              }, 2000);
-            })
-            .catch(() => {
-              hasFeedbackPlayedRef.current = false;
-              setHasFeedbackPlayed(false);
-            });
+        // 오답 → 다시 10초 대기 후 재평가
+        requeueWait();
+      }
+    } catch (e) {
+      await playTTS('네트워크 문제로 비교를 완료하지 못했어요. 다시 시도해볼게요.');
+      requeueWait();
+    }
+  }, [exercises, currentExerciseIndex, step, playTTS, clearAllTimers, moveToNextStep]);
+
+  // 설명이 준비되면 자동 시작
+  useEffect(() => {
+    if (currentPhase === 'loading' && exerciseDesc && exerciseDesc !== '포즈 설명을 불러오는 중입니다...') {
+      const t = setTimeout(() => startDescriptionPhase(), 400);
+      return () => clearTimeout(t);
+    }
+  }, [currentPhase, exerciseDesc, startDescriptionPhase]);
+
+  // 운동/스텝 데이터 로딩
+  useEffect(() => {
+    const routineId = searchParams.get('routineId');
+    if (!routineId) return;
+
+    const fetchData = async () => {
+      try {
+        const response = await axios.get(
+          `https://v-tune-be.onrender.com/api/routines/${routineId}/exercises/`
+        );
+        const exerciseList = response.data.exercises;
+        if (Array.isArray(exerciseList) && exerciseList.length > 0) {
+          setExercises(exerciseList);
+          const currentExercise = exerciseList[currentExerciseIndex];
+          setExerciseName(currentExercise?.name || '운동 이름 없음');
+          await loadPoseSteps(currentExercise.exercise_id);
         }
-        console.log('정답이 아닙니다');
+      } catch (error) {
+        console.error('[DATA] 로딩 실패:', error);
+      }
+    };
+
+    fetchData();
+  }, [searchParams, currentExerciseIndex]);
+
+  const loadPoseSteps = async (exerciseId: number) => {
+    try {
+      const response = await axios.get(
+        `https://v-tune-be.onrender.com/api/data/pose-steps/?exercise_id=${exerciseId}`
+      );
+
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        const steps = response.data;
+        setPoseSteps(steps);
+        setCurrentStepIndex(0);
+        setStep(steps[0].step_number);
+        setExerciseDesc(steps[0].pose_description || '포즈 설명 없음');
+        setCurrentPhase('loading');
+        if (currentExerciseIndex > 0) setSets(0);
       }
     } catch (error) {
-      console.error('백엔드 API 오류:', error);
+      console.error('[DATA] 포즈 스텝 로딩 실패:', error);
     }
-  }, [enqueueTTS, moveToNextStep]);
+  };
 
-  // 최신 onResults를 Pose에 연결하기 위한 ref
+  // Pose 결과 처리 (스켈레톤만)
+  const onResults = useCallback(async (results: Results) => {
+    if (!results.poseLandmarks) return;
+
+    if (currentPhase === 'waiting') {
+      latestLandmarksRef.current = results.poseLandmarks;
+    }
+
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    const video = webcamRef.current?.video;
+    if (!ctx || !canvas || !video) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = '#6d88e8ff';
+    ctx.lineWidth = 2;
+    for (const [startIdx, endIdx] of POSE_CONNECTIONS) {
+      const start = results.poseLandmarks[startIdx];
+      const end = results.poseLandmarks[endIdx];
+      if (!start || !end) continue;
+      ctx.beginPath();
+      ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
+      ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#6d88e8ff';
+    for (const pt of results.poseLandmarks) {
+      ctx.beginPath();
+      ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 4, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+  }, [currentPhase]);
+
+  // Pose 설정
   const onResultsRef = useRef<(r: Results) => void>(() => {});
   useEffect(() => { onResultsRef.current = onResults; }, [onResults]);
 
-  // Pose는 1회만 생성
   useEffect(() => {
     const pose = new Pose({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
@@ -440,16 +383,11 @@ const StretchScreen: React.FC = () => {
     };
   }, []);
 
-  // 카메라는 전/후면 전환 시에만 재시작
+  // 카메라
   useEffect(() => {
     const startCamera = () => {
-      if (
-        typeof webcamRef.current !== "undefined" &&
-        webcamRef.current !== null &&
-        webcamRef.current.video !== null &&
-        poseRef.current
-      ) {
-        cameraRef.current = new cam.Camera(webcamRef.current.video!, {
+      if (webcamRef.current?.video && poseRef.current) {
+        cameraRef.current = new cam.Camera(webcamRef.current.video, {
           onFrame: async () => {
             if (poseRef.current && webcamRef.current?.video) {
               await poseRef.current.send({ image: webcamRef.current.video });
@@ -461,7 +399,6 @@ const StretchScreen: React.FC = () => {
         cameraRef.current.start();
       }
     };
-
     startCamera();
     return () => {
       cameraRef.current?.stop();
@@ -473,28 +410,13 @@ const StretchScreen: React.FC = () => {
     setFacingMode(prev => (prev === "user" ? "environment" : "user"));
   }, []);
 
-  // 설명 TTS (중복 방지 + 큐)
-  useEffect(() => {
-    if (!exerciseDesc) return;
-
-    const currentEx = exercises[currentExerciseIndex];
-    const descKey = `${currentEx?.exercise_id ?? 'x'}-${step}-${exerciseDesc}`;
-    if (lastDescKeyRef.current === descKey) return; // 같은 설명이면 패스
-    lastDescKeyRef.current = descKey;
-
-    const timer = setTimeout(() => {
-      enqueueTTS(exerciseDesc, 'description').catch(() => {});
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [exerciseDesc, step, currentExerciseIndex, exercises, enqueueTTS]);
-
-  // 언마운트 시 TTS 정리
+  // 언마운트 정리
   useEffect(() => {
     return () => {
-      stopAllTTS();
+      clearAllTimers();
+      stopTTS();
     };
-  }, []);
+  }, [clearAllTimers, stopTTS]);
 
   return (
     <div className="stretch-container">
@@ -512,7 +434,6 @@ const StretchScreen: React.FC = () => {
             ref={webcamRef}
             className="camera"
             videoConstraints={{ facingMode }}
-            // 좌우반전(미러링) 미적용
           />
           <canvas
             ref={canvasRef}
@@ -546,6 +467,12 @@ const StretchScreen: React.FC = () => {
         <div className="custom-balloon">
           {exerciseDesc}
           {isPlayingTTS && <div className="playing-indicator">🔊</div>}
+          <div style={{ fontSize: '10px', color: '#888', marginTop: '5px' }}>
+            상태: {currentPhase === 'description' ? '설명 중' : 
+                  currentPhase === 'waiting' ? '자세 대기 중' :
+                  currentPhase === 'feedback' ? '피드백 중' :
+                  currentPhase === 'moving' ? '다음 단계 준비 중' : '로딩 중'}
+          </div>
         </div>
       </div>
     </div>
