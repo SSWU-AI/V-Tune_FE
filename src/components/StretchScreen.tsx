@@ -13,7 +13,7 @@ import prevIcon from '../assets/icons/prev.svg';
 import personIcon from '../assets/icons/person.svg';
 import Popup from './Popup';
 
-const MAX_DOTS = 3;
+const MAX_DOTS = 1;
 
 // 타이밍 설정
 const POSE_WAIT_TIME = 10000;       // 10초 - 운동 설명 후 자세 대기
