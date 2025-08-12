@@ -484,7 +484,7 @@ const StretchScreen: React.FC = () => {
             ref={webcamRef}
             className="camera"
             videoConstraints={{ facingMode }}
-            mirrored={false}
+            mirrored={true}
           />
           <canvas
             ref={canvasRef}
